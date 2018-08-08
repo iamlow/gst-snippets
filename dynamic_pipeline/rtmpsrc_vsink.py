@@ -94,8 +94,7 @@ def timeout_cb(pdata):
     print("called timeout_cb")
     srcpad = pdata.data["src"].get_static_pad('src')
     srcpad.add_probe(Gst.PadProbeType.IDLE, probe_cb, pdata)
-    return GLib.SOURCE_REMOVE
-
+    return True
 
 def main(args):
     if len(args) != 2:
