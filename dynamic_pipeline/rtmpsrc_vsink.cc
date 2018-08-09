@@ -184,7 +184,7 @@ class Multiview
 
         vconv->link(caps)->link(vsink);
 
-        vconv->set_state(Gst::STATE_PLAYING);
+        caps->set_state(Gst::STATE_PLAYING);
         std::cout << __LINE__ << '\n';
         // return Gst::PAD_PROBE_DROP;
         return Gst::PAD_PROBE_REMOVE;
