@@ -25,8 +25,10 @@ class Source:
 
         self.vque = Gst.ElementFactory.make('queue')
         self.h264parse = Gst.ElementFactory.make('h264parse')
-        self.vdec = Gst.ElementFactory.make('avdec_h264')
-        self.vconv = Gst.ElementFactory.make('videoscale')
+        # self.vdec = Gst.ElementFactory.make('avdec_h264')
+        # self.vconv = Gst.ElementFactory.make('videoscale')
+        self.vdec = Gst.ElementFactory.make('omxh264dec')
+        self.vconv = Gst.ElementFactory.make('nvvidconv')
         self.caps = Gst.ElementFactory.make('capsfilter')
         self.tee = Gst.ElementFactory.make('tee')
 
@@ -105,11 +107,13 @@ class VideoSink:
     def __init__(self, pipeline):
         self.pipeline = pipeline
 
-        self.comp = Gst.ElementFactory.make('glvideomixer')
+        self.comp = Gst.ElementFactory.make('nvcompositor')
+        # self.sink = Gst.ElementFactory.make('nvoverlaysink')
+        # self.comp = Gst.ElementFactory.make('glvideomixer')
         self.sink = Gst.ElementFactory.make('fpsdisplaysink')
-        # self.sink.set_property('video-sink', 'glimagesink')
-        # self.sink.set_property('text-overlay', True)
-        # self.sink.set_property('signal-fps-measurements', True)
+        # self.sink.set_property('video-sink', 'nvoverlaysink')
+        self.sink.set_property('text-overlay', False)
+        self.sink.set_property('signal-fps-measurements', True)
 
         self.pipeline.add(self.comp)
         self.pipeline.add(self.sink)
@@ -126,6 +130,7 @@ class VideoSink:
         comp_sink_pad.set_property('height', height)
 
         return comp_sink_pad
+
 
 """
 Launcher.
@@ -148,6 +153,8 @@ class Launcher:
         self.source.link_pad(self.vsink.request_pad(480, 810, 480, 270))
         self.source.link_pad(self.vsink.request_pad(960, 810, 480, 270))
 
+        self.pipeline.connect('deep-notify', self.notify)
+
         # create and event loop and feed gstreamer bus mesages to it
         self.loop = GLib.MainLoop()
 
@@ -168,6 +175,11 @@ class Launcher:
 
         # cleanup
         self.pipeline.set_state(Gst.State.NULL)
+
+    def notify(self, sender, obj, arg):
+        prop = obj.get_property(arg.name)
+        # print('notify', sender, arg.name, prop)
+        print(prop)
 
     def on_message(self, bus, message):
         t = message.type
