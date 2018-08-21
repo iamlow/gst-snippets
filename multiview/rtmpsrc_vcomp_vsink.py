@@ -25,10 +25,10 @@ class Source:
 
         self.vque = Gst.ElementFactory.make('queue')
         self.h264parse = Gst.ElementFactory.make('h264parse')
-        # self.vdec = Gst.ElementFactory.make('avdec_h264')
-        # self.vconv = Gst.ElementFactory.make('videoscale')
-        self.vdec = Gst.ElementFactory.make('omxh264dec')
-        self.vconv = Gst.ElementFactory.make('nvvidconv')
+        self.vdec = Gst.ElementFactory.make('avdec_h264')
+        self.vconv = Gst.ElementFactory.make('videoscale')
+        # self.vdec = Gst.ElementFactory.make('omxh264dec')
+        # self.vconv = Gst.ElementFactory.make('nvvidconv')
         self.caps = Gst.ElementFactory.make('capsfilter')
         self.tee = Gst.ElementFactory.make('tee')
 
@@ -100,7 +100,14 @@ class Source:
     def link_pad(self, pad):
         tee_src_pad_temp = self.tee.get_pad_template('src_%u')
         tee_src_pad = self.tee.request_pad(tee_src_pad_temp, None, None)
+        print(tee_src_pad_temp.get_name())
         tee_src_pad.link(pad)
+
+    def reinit_tee(self):
+        self.pipeline.remove(self.tee)
+        self.tee = Gst.ElementFactory.make('tee')
+        self.pipeline.add(self.tee)
+        self.caps.link(self.tee)
 
 
 class VideoSink:
@@ -131,6 +138,11 @@ class VideoSink:
 
         return comp_sink_pad
 
+    def reinit_comp(self):
+        self.pipeline.remove(self.comp)
+        self.comp = Gst.ElementFactory.make('nvcompositor')
+        self.pipeline.add(self.comp)
+        self.comp.link(self.sink)
 
 """
 Launcher.
@@ -141,24 +153,26 @@ class Launcher:
     def __init__(self, args):
         self.pipeline = Gst.Pipeline.new()
 
-        self.source = Source(self.pipeline, args[1])
+        self.sources = []
+        self.sources.append(Source(self.pipeline, args[1]))
+        self.sources.append(Source(self.pipeline, args[2]))
         self.vsink = VideoSink(self.pipeline)
 
-        self.source.link_pad(self.vsink.request_pad(0, 0, 960, 540))
-        self.source.link_pad(self.vsink.request_pad(960, 0, 960, 540))
-        self.source.link_pad(self.vsink.request_pad(0, 540, 480, 270))
-        self.source.link_pad(self.vsink.request_pad(480, 540, 480, 270))
-        self.source.link_pad(self.vsink.request_pad(960, 540, 480, 270))
-        self.source.link_pad(self.vsink.request_pad(0, 810, 480, 270))
-        self.source.link_pad(self.vsink.request_pad(480, 810, 480, 270))
-        self.source.link_pad(self.vsink.request_pad(960, 810, 480, 270))
+        self.sources[0].link_pad(self.vsink.request_pad(0, 0, 960, 540))
+        self.sources[1].link_pad(self.vsink.request_pad(960, 0, 960, 540))
+        self.sources[0].link_pad(self.vsink.request_pad(0, 540, 480, 270))
+        self.sources[1].link_pad(self.vsink.request_pad(480, 540, 480, 270))
+        self.sources[0].link_pad(self.vsink.request_pad(960, 540, 480, 270))
+        self.sources[1].link_pad(self.vsink.request_pad(0, 810, 480, 270))
+        self.sources[0].link_pad(self.vsink.request_pad(480, 810, 480, 270))
+        self.sources[1].link_pad(self.vsink.request_pad(960, 810, 480, 270))
 
         self.pipeline.connect('deep-notify', self.notify)
 
         # create and event loop and feed gstreamer bus mesages to it
         self.loop = GLib.MainLoop()
 
-        # GLib.timeout_add_seconds(5, self.timeout_cb)
+        GLib.timeout_add_seconds(5, self.timeout_cb)
 
         bus = self.pipeline.get_bus()
         bus.add_signal_watch()
@@ -178,8 +192,8 @@ class Launcher:
 
     def notify(self, sender, obj, arg):
         prop = obj.get_property(arg.name)
-        # print('notify', sender, arg.name, prop)
-        print(prop)
+        print('notify', sender, arg.name, prop)
+        # print(prop)
 
     def on_message(self, bus, message):
         t = message.type
@@ -194,31 +208,37 @@ class Launcher:
 
     def probe_cb(self, pad, info):
         print('called probe_cb')
-        self.caps.set_state(Gst.State.NULL)
-        self.pipeline.remove(self.caps)
+        self.pipeline.set_state(Gst.State.NULL)
 
-        self.caps = Gst.ElementFactory.make('capsfilter')
-        self.pipeline.add(self.caps)
-        # capsprop = Gst.Caps.from_string(
-        #     'video/x-raw(memory:NVMM), width=480, height=270')
-        # self.caps.set_property('caps', capsprop)
-        self.caps.sync_state_with_parent()
+        # Compositor
+        # self.vsink.reinit_comp()
 
-        self.vconv.link(self.caps)
-        self.caps.link(self.vsink)
-        self.caps.set_state(Gst.State.PLAYING)
+        # # Tee
+        # self.sources[0].reinit_tee()
+        # self.sources[1].reinit_tee()
+
+        # self.sources[1].link_pad(self.vsink.request_pad(0, 0, 960, 540))
+        # self.sources[0].link_pad(self.vsink.request_pad(960, 0, 960, 540))
+        # self.sources[0].link_pad(self.vsink.request_pad(0, 540, 480, 270))
+        # self.sources[1].link_pad(self.vsink.request_pad(480, 540, 480, 270))
+        # self.sources[0].link_pad(self.vsink.request_pad(960, 540, 480, 270))
+        # self.sources[1].link_pad(self.vsink.request_pad(0, 810, 480, 270))
+        # self.sources[0].link_pad(self.vsink.request_pad(480, 810, 480, 270))
+        # self.sources[1].link_pad(self.vsink.request_pad(960, 810, 480, 270))
+
+        self.pipeline.set_state(Gst.State.PLAYING)
 
         return Gst.PadProbeReturn.REMOVE
 
     def timeout_cb(self):
         print('called timeout_cb')
-        srcpad = self.src.get_static_pad('src')
+        srcpad = self.sources[0].src.get_static_pad('src')
         srcpad.add_probe(Gst.PadProbeType.IDLE, self.probe_cb)
         return True
 
 
 def main(args):
-    if len(args) != 2:
+    if len(args) != 3:
         sys.stderr.write('usage: %s <media file or uri>\n' % args[0])
         sys.exit(1)
 
