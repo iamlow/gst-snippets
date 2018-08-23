@@ -20,7 +20,7 @@ cmd += ' sink_8::xpos=960   sink_8::ypos=810    sink_8::width=480   sink_8::heig
 cmd += ' sink_9::xpos=1440  sink_9::ypos=810    sink_9::width=480   sink_9::height=270'
 
 # cmd += ' ! nvoverlaysink'
-cmd += ' ! fpsdisplaysink video-sink=nvoverlaysink text-overlay=false signal-fps-measurements=true sync=true'
+cmd += ' ! fpsdisplaysink video-sink=nvoverlaysink text-overlay=false signal-fps-measurements=true sync=false'
 
 cmd += ' rtmpsrc location=\'' + argv[1] + '\''
 cmd += ' ! flvdemux name=dex4'
@@ -32,27 +32,32 @@ cmd += ' ! flvdemux name=dex5'
 cmd += ' dex5.video ! queue max-size-buffers=3 ! h264parse ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t5'
 cmd += ' dex5.audio ! queue ! fakesink'
 
-cmd += ' rtmpsrc location=\'' + argv[1] + '\''
+cmd += ' rtmpsrc location=\'' + argv[3] + '\''
 cmd += ' ! flvdemux name=dex6'
 cmd += ' dex6.video ! queue max-size-buffers=3 ! h264parse ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t6'
 cmd += ' dex6.audio ! queue ! fakesink'
 
-cmd += ' rtmpsrc location=\'' + argv[2] + '\''
+cmd += ' rtmpsrc location=\'' + argv[4] + '\''
 cmd += ' ! flvdemux name=dex7'
 cmd += ' dex7.video ! queue max-size-buffers=3 ! h264parse ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t7'
 cmd += ' dex7.audio ! queue ! fakesink'
 
-cmd += ' rtmpsrc location=\'' + argv[1] + '\''
+cmd += ' rtmpsrc location=\'' + argv[5] + '\''
 cmd += ' ! flvdemux name=dex8'
 cmd += ' dex8.video ! queue max-size-buffers=3 ! h264parse ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t8'
 cmd += ' dex8.audio ! queue ! fakesink'
 
-cmd += ' rtmpsrc location=\'' + argv[2] + '\''
+cmd += ' t4. ! queue ! omxh264enc ! h264parse ! queue ! flvmux name=mux ! rtmpsink location=rtmp://a.rtmp.youtube.com/live2/ws8c-p19s-tc2g-3puj'
+# cmd += ' audiotestsrc is-live=true'
+# cmd += ' ! queue'
+# cmd += ' ! voaacenc'
+# cmd += ' ! mux.audio'
+
+cmd += ' rtmpsrc location=\'' + argv[6] + '\''
 cmd += ' ! flvdemux name=dex9'
 cmd += ' dex9.video ! queue max-size-buffers=3 ! h264parse ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t9'
-cmd += ' dex9.audio ! queue ! fakesink'
+cmd += ' dex9.audio ! queue ! mux.audio'
 
-cmd += ' t4. ! queue ! omxh264enc ! h264parse ! flvmux ! rtmpsink location=rtmp://192.168.0.10/live/s0'
 
 cmd += ' t4. ! queue ! mix.sink_0'
 cmd += ' t5. ! queue ! nvvidconv ! \'video/x-raw, width=(int)960, height=(int)540\' ! mix.sink_1'

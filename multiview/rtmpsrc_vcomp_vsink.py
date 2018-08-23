@@ -12,7 +12,7 @@ import gi
 gi.require_version('Gst', '1.0')
 gi.require_version('GLib', '2.0')
 gi.require_version('GObject', '2.0')
-from gi.repository import GObject, Gst, GLib
+from gi.repository import Gst, GLib
 
 
 class Source:
@@ -25,10 +25,10 @@ class Source:
 
         self.vque = Gst.ElementFactory.make('queue')
         self.h264parse = Gst.ElementFactory.make('h264parse')
-        self.vdec = Gst.ElementFactory.make('avdec_h264')
-        self.vconv = Gst.ElementFactory.make('videoscale')
-        # self.vdec = Gst.ElementFactory.make('omxh264dec')
-        # self.vconv = Gst.ElementFactory.make('nvvidconv')
+        # self.vdec = Gst.ElementFactory.make('avdec_h264')
+        # self.vconv = Gst.ElementFactory.make('videoscale')
+        self.vdec = Gst.ElementFactory.make('omxh264dec')
+        self.vconv = Gst.ElementFactory.make('nvvidconv')
         self.caps = Gst.ElementFactory.make('capsfilter')
         self.tee = Gst.ElementFactory.make('tee')
 
@@ -167,12 +167,12 @@ class Launcher:
         self.sources[0].link_pad(self.vsink.request_pad(480, 810, 480, 270))
         self.sources[1].link_pad(self.vsink.request_pad(960, 810, 480, 270))
 
-        self.pipeline.connect('deep-notify', self.notify)
+        # self.pipeline.connect('deep-notify', self.notify)
 
         # create and event loop and feed gstreamer bus mesages to it
         self.loop = GLib.MainLoop()
 
-        GLib.timeout_add_seconds(5, self.timeout_cb)
+        # GLib.timeout_add_seconds(5, self.timeout_cb)
 
         bus = self.pipeline.get_bus()
         bus.add_signal_watch()
@@ -242,7 +242,8 @@ def main(args):
         sys.stderr.write('usage: %s <media file or uri>\n' % args[0])
         sys.exit(1)
 
-    GObject.threads_init()
+    # Calling GObject.threads_init() is not needed for PyGObject 3.10.2+
+    # GObject.threads_init()
     Gst.init(None)
     Launcher(args)
 
