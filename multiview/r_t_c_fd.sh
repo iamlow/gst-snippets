@@ -20,7 +20,7 @@ cmd += ' sink_8::xpos=960   sink_8::ypos=810    sink_8::width=480   sink_8::heig
 cmd += ' sink_9::xpos=1440  sink_9::ypos=810    sink_9::width=480   sink_9::height=270'
 
 # cmd += ' ! nvoverlaysink'
-cmd += ' ! fpsdisplaysink video-sink=nvoverlaysink text-overlay=false signal-fps-measurements=true sync=false'
+cmd += ' ! fpsdisplaysink video-sink=nvoverlaysink text-overlay=false signal-fps-measurements=true sync=true'
 
 cmd += ' rtmpsrc location=\'' + argv[1] + '\''
 cmd += ' ! flvdemux name=dex4'
@@ -47,7 +47,17 @@ cmd += ' ! flvdemux name=dex8'
 cmd += ' dex8.video ! queue max-size-buffers=3 ! h264parse ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t8'
 cmd += ' dex8.audio ! queue ! fakesink'
 
-cmd += ' t4. ! queue ! omxh264enc ! h264parse ! queue ! flvmux name=mux ! rtmpsink location=rtmp://a.rtmp.youtube.com/live2/ws8c-p19s-tc2g-3puj'
+# cmd += ' t4. ! queue ! omxh264enc ! h264parse ! queue ! flvmux name=mux ! rtmpsink location=rtmp://a.rtmp.youtube.com/live2/ws8c-p19s-tc2g-3puj'
+# cmd += ' t4. ! queue ! omxh264enc ! h264parse ! queue ! flvmux name=mux ! rtmpsink location=rtmp://192.168.0.11/live/s0'
+
+cmd += ' glvideomixer name=glvm'
+cmd += ' sink_0::xpos=0 sink_0::ypos=0 sink_0::width=1920 sink_0::height=1080'
+cmd += ' sink_1::xpos=1380 sink_1::ypos=750 sink_1::width=480 sink_1::height=270'
+# cmd += ' ! queue ! omxh264enc ! h264parse ! queue ! flvmux name=mux ! rtmpsink location=rtmp://192.168.0.11/live/s0'
+cmd += ' ! queue ! omxh264enc ! h264parse ! queue ! flvmux name=mux ! rtmpsink location=rtmp://a.rtmp.youtube.com/live2/ws8c-p19s-tc2g-3puj'
+cmd += ' t4. ! queue ! glvm.sink_0'
+cmd += ' t5. ! queue ! glvm.sink_1'
+
 # cmd += ' audiotestsrc is-live=true'
 # cmd += ' ! queue'
 # cmd += ' ! voaacenc'
@@ -57,7 +67,6 @@ cmd += ' rtmpsrc location=\'' + argv[6] + '\''
 cmd += ' ! flvdemux name=dex9'
 cmd += ' dex9.video ! queue max-size-buffers=3 ! h264parse ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t9'
 cmd += ' dex9.audio ! queue ! mux.audio'
-
 
 cmd += ' t4. ! queue ! mix.sink_0'
 cmd += ' t5. ! queue ! nvvidconv ! \'video/x-raw, width=(int)960, height=(int)540\' ! mix.sink_1'
