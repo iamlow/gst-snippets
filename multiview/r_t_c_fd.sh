@@ -76,10 +76,8 @@ cmd += ' t4. ! queue ! textoverlay text=\'Channel 1\' valignment=top halignment=
 cmd += ' t5. ! queue ! textoverlay text=\'Channel 2\' valignment=top halignment=left font-desc="Sans, 20" ! mix.sink_3'
 cmd += ' t6. ! queue ! textoverlay text=\'Channel 3\' valignment=top halignment=left font-desc="Sans, 20" ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! mix.sink_4'
 cmd += ' t7. ! queue ! textoverlay text=\'Channel 4\' valignment=top halignment=left font-desc="Sans, 20" ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! mix.sink_6'
-# cmd += ' t7. ! queue ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! mix.sink_6'
 cmd += ' t8. ! queue ! textoverlay text=\'Channel 5\' valignment=top halignment=left font-desc="Sans, 20" ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! mix.sink_7'
 cmd += ' t9. ! queue ! textoverlay text=\'Channel 6\' valignment=top halignment=left font-desc="Sans, 20" ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! mix.sink_8'
-# cmd += ' t5. ! queue ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! textoverlay text=\'Room H NOHANGUL\' valignment=top halignment=left font-desc="Sans, 20" ! mix.sink_7'
 
 print cmd
 system(cmd)
