@@ -25,10 +25,15 @@ class Source:
 
         self.vque = Gst.ElementFactory.make('queue')
         self.h264parse = Gst.ElementFactory.make('h264parse')
+
+        # For jetson and mac
         self.vdec = Gst.ElementFactory.make('avdec_h264')
         self.vconv = Gst.ElementFactory.make('videoscale')
+
+        # For jetson only
         # self.vdec = Gst.ElementFactory.make('omxh264dec')
         # self.vconv = Gst.ElementFactory.make('nvvidconv')
+
         self.caps = Gst.ElementFactory.make('capsfilter')
         self.tee = Gst.ElementFactory.make('tee')
 
@@ -112,20 +117,20 @@ class VideoSink:
     def __init__(self, pipeline):
         self.pipeline = pipeline
 
+        # For jetson only
         # self.comp = Gst.ElementFactory.make('nvcompositor')
-        self.sink = Gst.ElementFactory.make('glimagesink')
+        # self.sink = Gst.ElementFactory.make('nvoverlaysink')
+
+        # For jetson and mac
         self.comp = Gst.ElementFactory.make('glvideomixer')
-        # self.sink = Gst.ElementFactory.make('nveglglessink')
-        # self.sink = Gst.ElementFactory.make('fpsdisplaysink')
+        self.sink = Gst.ElementFactory.make('fpsdisplaysink')
         # self.sink.set_property('video-sink', 'nvoverlaysink')
-        # self.sink.set_property('text-overlay', False)
+        self.sink.set_property('text-overlay', False)
         # self.sink.set_property('signal-fps-measurements', True)
 
         self.pipeline.add(self.comp)
         self.pipeline.add(self.sink)
 
-        # capsprop = Gst.Caps.from_string('video/x-raw')
-        # self.comp.link_filtered(self.sink, capsprop)
         self.comp.link(self.sink)
 
         self.comp_sink_pads = []
