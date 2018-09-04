@@ -36,6 +36,7 @@ class Source:
 
         self.caps = Gst.ElementFactory.make('capsfilter')
         self.tee = Gst.ElementFactory.make('tee')
+        self.vque2 = Gst.ElementFactory.make('queue')
 
         self.aque = Gst.ElementFactory.make('queue')
         self.asink = Gst.ElementFactory.make('fakesink')
@@ -49,6 +50,7 @@ class Source:
         self.pipeline.add(self.vconv)
         self.pipeline.add(self.caps)
         self.pipeline.add(self.tee)
+        self.pipeline.add(self.vque2)
 
         self.pipeline.add(self.aque)
         self.pipeline.add(self.asink)
@@ -73,6 +75,7 @@ class Source:
         self.vdec.link(self.vconv)
         self.vconv.link(self.caps)
         self.caps.link(self.tee)
+        self.tee.link(self.vque2)
 
         self.aque.link(self.asink)
 
@@ -118,15 +121,15 @@ class VideoSink:
         self.pipeline = pipeline
 
         # For jetson only
-        # self.comp = Gst.ElementFactory.make('nvcompositor')
-        # self.sink = Gst.ElementFactory.make('nvoverlaysink')
-
-        # For jetson and mac
-        self.comp = Gst.ElementFactory.make('glvideomixer')
-        self.sink = Gst.ElementFactory.make('glimagesink')
+        self.comp = Gst.ElementFactory.make('nvcompositor')
+        self.sink = Gst.ElementFactory.make('nvoverlaysink')
         # self.sink.set_property('video-sink', 'nvoverlaysink')
         # self.sink.set_property('text-overlay', False)
         # self.sink.set_property('signal-fps-measurements', True)
+
+        # For jetson and mac
+        # self.comp = Gst.ElementFactory.make('glvideomixer')
+        # self.sink = Gst.ElementFactory.make('glimagesink')
 
         self.pipeline.add(self.comp)
         self.pipeline.add(self.sink)
@@ -166,8 +169,10 @@ class Launcher:
         self.sources.append(Source(self.pipeline, args[2]))
         self.vsink = VideoSink(self.pipeline)
 
-        self.sources[0].link_pad(self.vsink.request_pad(0, 0, 960, 540))
-        self.sources[1].link_pad(self.vsink.request_pad(960, 540, 960, 540))
+        self.sources[0].vque2.get_static_pad('src').link(self.vsink.request_pad(0, 0, 960, 540))
+        self.sources[1].vque2.get_static_pad('src').link(self.vsink.request_pad(960, 540, 960, 540))
+        # self.sources[0].link_pad(self.vsink.request_pad(0, 0, 960, 540))
+        # self.sources[1].link_pad(self.vsink.request_pad(960, 540, 960, 540))
         # self.sources[0].link_pad(self.vsink.request_pad(0, 540, 480, 270))
         # self.sources[1].link_pad(self.vsink.request_pad(480, 540, 480, 270))
         # self.sources[0].link_pad(self.vsink.request_pad(960, 540, 480, 270))
@@ -180,7 +185,7 @@ class Launcher:
         # create and event loop and feed gstreamer bus mesages to it
         self.loop = GLib.MainLoop()
 
-        GLib.timeout_add_seconds(5, self.timeout_cb)
+        GLib.timeout_add_seconds(3, self.timeout_cb)
 
         bus = self.pipeline.get_bus()
         bus.add_signal_watch()
@@ -217,17 +222,44 @@ class Launcher:
     def probe_cb(self, pad, info):
         print('called probe_cb')
 
-        self.sources[0].tee.set_state(Gst.State.NULL)
+        self.sources[0].vque2.set_state(Gst.State.NULL)
 
-        self.sources[0].tee.release_request_pad(self.sources[0].tee_src_pad)
+        self.pipeline.remove(self.sources[0].vque2)
+        self.sources[0].vque2 = Gst.ElementFactory.make('queue')
+        self.pipeline.add(self.sources[0].vque2)
+        self.sources[0].tee.link(self.sources[0].vque2)
+        # tee_src_pad_temp = self.sources[0].tee.get_pad_template('src_%u')
+        # self.sources[0].tee_src_pad = self.sources[0].tee.request_pad(tee_src_pad_temp, None, None)
+        self.sources[0].vque2.get_static_pad('src').link(self.vsink.comp_sink_pads[0])
 
-        tee_src_pad_temp = self.sources[0].tee.get_pad_template('src_%u')
-        self.sources[0].tee_src_pad = self.sources[0].tee.request_pad(tee_src_pad_temp, None, None)
+        # self.sources[0].tee.sync_state_with_parent()
 
-        self.sources[0].tee.sync_state_with_parent()
-        self.sources[0].tee_src_pad.link(self.vsink.comp_sink_pads[0])
+        # if self.once:
+        # self.sources[0].tee_src_pad.link(self.vsink.comp_sink_pads[0])
+        # self.once = False
+        # else:
+        #     self.sources[0].tee_src_pad.link(self.vsink.comp_sink_pads[1])
+        #     self.once = True
 
-        self.sources[0].tee.set_state(Gst.State.PLAYING)
+        self.sources[0].vque2.set_state(Gst.State.PLAYING)
+
+        # self.sources[0].tee.set_state(Gst.State.NULL)
+        #
+        # self.sources[0].tee.release_request_pad(self.sources[0].tee_src_pad)
+        #
+        # tee_src_pad_temp = self.sources[0].tee.get_pad_template('src_%u')
+        # self.sources[0].tee_src_pad = self.sources[0].tee.request_pad(tee_src_pad_temp, None, None)
+        #
+        # # self.sources[0].tee.sync_state_with_parent()
+        #
+        # # if self.once:
+        # self.sources[0].tee_src_pad.link(self.vsink.comp_sink_pads[0])
+        # # self.once = False
+        # # else:
+        # #     self.sources[0].tee_src_pad.link(self.vsink.comp_sink_pads[1])
+        # #     self.once = True
+        #
+        # self.sources[0].tee.set_state(Gst.State.PLAYING)
 
         return Gst.PadProbeReturn.REMOVE
 
@@ -242,7 +274,13 @@ class Launcher:
         self.sources[1].tee_src_pad = self.sources[1].tee.request_pad(tee_src_pad_temp, None, None)
 
         self.sources[1].tee.sync_state_with_parent()
-        self.sources[1].tee_src_pad.link(self.vsink.comp_sink_pads[1])
+
+        if self.once2:
+            self.sources[1].tee_src_pad.link(self.vsink.comp_sink_pads[1])
+            self.once2 = False
+        else:
+            self.sources[1].tee_src_pad.link(self.vsink.comp_sink_pads[0])
+            self.once2 = True
 
         self.sources[1].tee.set_state(Gst.State.PLAYING)
 
@@ -310,8 +348,8 @@ class Launcher:
         srcpad = self.sources[0].src.get_static_pad('src')
         srcpad.add_probe(Gst.PadProbeType.IDLE, self.probe_cb)
 
-        srcpad2 = self.sources[1].src.get_static_pad('src')
-        srcpad2.add_probe(Gst.PadProbeType.IDLE, self.probe_cb2)
+        # srcpad2 = self.sources[1].src.get_static_pad('src')
+        # srcpad2.add_probe(Gst.PadProbeType.IDLE, self.probe_cb2)
 
         # srcpad = self.sources[0].src.get_static_pad('src')
         # srcpad.add_probe(Gst.PadProbeType.BLOCK_DOWNSTREAM, self.probe_cb3)
