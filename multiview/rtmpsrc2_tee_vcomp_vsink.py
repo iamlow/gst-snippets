@@ -27,16 +27,15 @@ class Source:
         self.h264parse = Gst.ElementFactory.make('h264parse')
 
         # For jetson and mac
-        self.vdec = Gst.ElementFactory.make('avdec_h264')
-        self.vconv = Gst.ElementFactory.make('videoscale')
+        # self.vdec = Gst.ElementFactory.make('avdec_h264')
+        # self.vconv = Gst.ElementFactory.make('videoscale')
 
         # For jetson only
-        # self.vdec = Gst.ElementFactory.make('omxh264dec')
-        # self.vconv = Gst.ElementFactory.make('nvvidconv')
+        self.vdec = Gst.ElementFactory.make('omxh264dec')
+        self.vconv = Gst.ElementFactory.make('nvvidconv')
 
         self.caps = Gst.ElementFactory.make('capsfilter')
         self.tee = Gst.ElementFactory.make('tee')
-        self.vque2 = Gst.ElementFactory.make('queue')
 
         self.aque = Gst.ElementFactory.make('queue')
         self.asink = Gst.ElementFactory.make('fakesink')
@@ -50,7 +49,6 @@ class Source:
         self.pipeline.add(self.vconv)
         self.pipeline.add(self.caps)
         self.pipeline.add(self.tee)
-        self.pipeline.add(self.vque2)
 
         self.pipeline.add(self.aque)
         self.pipeline.add(self.asink)
@@ -75,7 +73,6 @@ class Source:
         self.vdec.link(self.vconv)
         self.vconv.link(self.caps)
         self.caps.link(self.tee)
-        self.tee.link(self.vque2)
 
         self.aque.link(self.asink)
 
@@ -169,10 +166,8 @@ class Launcher:
         self.sources.append(Source(self.pipeline, args[2]))
         self.vsink = VideoSink(self.pipeline)
 
-        self.sources[0].vque2.get_static_pad('src').link(self.vsink.request_pad(0, 0, 960, 540))
-        self.sources[1].vque2.get_static_pad('src').link(self.vsink.request_pad(960, 540, 960, 540))
-        # self.sources[0].link_pad(self.vsink.request_pad(0, 0, 960, 540))
-        # self.sources[1].link_pad(self.vsink.request_pad(960, 540, 960, 540))
+        self.sources[0].link_pad(self.vsink.request_pad(0, 0, 960, 540))
+        self.sources[1].link_pad(self.vsink.request_pad(960, 540, 960, 540))
         # self.sources[0].link_pad(self.vsink.request_pad(0, 540, 480, 270))
         # self.sources[1].link_pad(self.vsink.request_pad(480, 540, 480, 270))
         # self.sources[0].link_pad(self.vsink.request_pad(960, 540, 480, 270))
@@ -185,7 +180,7 @@ class Launcher:
         # create and event loop and feed gstreamer bus mesages to it
         self.loop = GLib.MainLoop()
 
-        GLib.timeout_add_seconds(3, self.timeout_cb)
+        GLib.timeout_add_seconds(5, self.timeout_cb)
 
         bus = self.pipeline.get_bus()
         bus.add_signal_watch()
@@ -220,53 +215,37 @@ class Launcher:
         return True
 
     def probe_cb(self, pad, info):
-        print('called probe_cb')
-
-        self.sources[0].vque2.set_state(Gst.State.NULL)
-
-        self.pipeline.remove(self.sources[0].vque2)
-        self.sources[0].vque2 = Gst.ElementFactory.make('queue')
-        self.pipeline.add(self.sources[0].vque2)
-        self.sources[0].tee.link(self.sources[0].vque2)
-        # tee_src_pad_temp = self.sources[0].tee.get_pad_template('src_%u')
-        # self.sources[0].tee_src_pad = self.sources[0].tee.request_pad(tee_src_pad_temp, None, None)
-        self.sources[0].vque2.get_static_pad('src').link(self.vsink.comp_sink_pads[0])
-
-        # self.sources[0].tee.sync_state_with_parent()
-
-        # if self.once:
-        # self.sources[0].tee_src_pad.link(self.vsink.comp_sink_pads[0])
-        # self.once = False
-        # else:
-        #     self.sources[0].tee_src_pad.link(self.vsink.comp_sink_pads[1])
-        #     self.once = True
-
-        self.sources[0].vque2.set_state(Gst.State.PLAYING)
+        print('called probe_cb BEGIN')
 
         # self.sources[0].tee.set_state(Gst.State.NULL)
-        #
-        # self.sources[0].tee.release_request_pad(self.sources[0].tee_src_pad)
-        #
-        # tee_src_pad_temp = self.sources[0].tee.get_pad_template('src_%u')
-        # self.sources[0].tee_src_pad = self.sources[0].tee.request_pad(tee_src_pad_temp, None, None)
-        #
-        # # self.sources[0].tee.sync_state_with_parent()
-        #
-        # # if self.once:
-        # self.sources[0].tee_src_pad.link(self.vsink.comp_sink_pads[0])
-        # # self.once = False
-        # # else:
-        # #     self.sources[0].tee_src_pad.link(self.vsink.comp_sink_pads[1])
-        # #     self.once = True
-        #
-        # self.sources[0].tee.set_state(Gst.State.PLAYING)
+        self.pipeline.set_state(Gst.State.NULL)
 
+        self.sources[0].tee.release_request_pad(self.sources[0].tee_src_pad)
+
+        tee_src_pad_temp = self.sources[0].tee.get_pad_template('src_%u')
+        self.sources[0].tee_src_pad = self.sources[0].tee.request_pad(tee_src_pad_temp, None, None)
+
+        srcpad2 = self.sources[1].src.get_static_pad('src')
+        srcpad2.add_probe(Gst.PadProbeType.IDLE, self.probe_cb2)
+
+        self.sources[0].tee.sync_state_with_parent()
+
+        if self.once:
+            self.sources[0].tee_src_pad.link(self.vsink.comp_sink_pads[0])
+            self.once = False
+        else:
+            self.sources[0].tee_src_pad.link(self.vsink.comp_sink_pads[1])
+            self.once = True
+
+        # self.sources[0].tee.set_state(Gst.State.PLAYING)
+        self.pipeline.set_state(Gst.State.PLAYING)
+        print('called probe_cb END')
         return Gst.PadProbeReturn.REMOVE
 
     def probe_cb2(self, pad, info):
-        print('called probe_cb2')
+        print('called probe_cb2 BEGIN')
 
-        self.sources[1].tee.set_state(Gst.State.NULL)
+        # self.sources[1].tee.set_state(Gst.State.NULL)
 
         self.sources[1].tee.release_request_pad(self.sources[1].tee_src_pad)
 
@@ -282,8 +261,9 @@ class Launcher:
             self.sources[1].tee_src_pad.link(self.vsink.comp_sink_pads[0])
             self.once2 = True
 
-        self.sources[1].tee.set_state(Gst.State.PLAYING)
+        # self.sources[1].tee.set_state(Gst.State.PLAYING)
 
+        print('called probe_cb2 END')
         return Gst.PadProbeReturn.REMOVE
 
     def event_cb(self, pad, info):
@@ -343,17 +323,15 @@ class Launcher:
         return Gst.PadProbeReturn.OK
 
     def timeout_cb(self):
-        print('called timeout_cb')
+        print('called timeout_cb BEGIN')
 
         srcpad = self.sources[0].src.get_static_pad('src')
         srcpad.add_probe(Gst.PadProbeType.IDLE, self.probe_cb)
 
-        # srcpad2 = self.sources[1].src.get_static_pad('src')
-        # srcpad2.add_probe(Gst.PadProbeType.IDLE, self.probe_cb2)
-
         # srcpad = self.sources[0].src.get_static_pad('src')
         # srcpad.add_probe(Gst.PadProbeType.BLOCK_DOWNSTREAM, self.probe_cb3)
 
+        print('called timeout_cb END')
         return True
 
 

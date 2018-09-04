@@ -33,7 +33,7 @@ class Launcher:
         self.que2 = Gst.ElementFactory.make('queue')
 
         self.mix = Gst.ElementFactory.make('glvideomixer')
-        # self.vconv = Gst.ElementFactory.make('nvvidconv')
+        self.vconv = Gst.ElementFactory.make('nvvidconv')
         # self.caps = Gst.ElementFactory.make('capsfilter')
         self.sink = Gst.ElementFactory.make('glimagesink')
 
@@ -44,7 +44,7 @@ class Launcher:
         self.pipeline.add(self.tee2)
         self.pipeline.add(self.que2)
         self.pipeline.add(self.mix)
-        # self.pipeline.add(self.vconv)
+        self.pipeline.add(self.vconv)
         # self.pipeline.add(self.caps)
         self.pipeline.add(self.sink)
 
@@ -52,7 +52,7 @@ class Launcher:
         self.src1.set_property('pattern', 0)
         self.src2.set_property('pattern', 24)
 
-        # capsprop = Gst.Caps.from_string('video/x-raw(memory:NVMM)')
+        self.capsprop = Gst.Caps.from_string('video/x-raw(memory:NVMM)')
         # self.caps.set_property('caps', capsprop)
 
         self.src_filter = Gst.Caps.from_string('video/x-raw, width=960, height=540')
@@ -77,7 +77,7 @@ class Launcher:
         self.que2.get_static_pad('src').link(self.mix_sink_pad2)
 
         self.mix.link(self.sink)
-        # self.vconv.link(self.caps)
+        self.vconv.link_filtered(self.sink, self.capsprop)
         # self.caps.link(self.sink)
 
         # self.pipeline.connect('deep-notify', self.notify)
@@ -120,7 +120,7 @@ class Launcher:
         return True
 
     def probe_cb2(self, pad, info):
-        print('called probe_cb2')
+        print('called probe_cb2 START')
 
         self.que2.set_state(Gst.State.NULL)
 
@@ -128,14 +128,15 @@ class Launcher:
         self.que2 = Gst.ElementFactory.make('queue')
         self.pipeline.add(self.que2)
         self.tee2.link(self.que2)
-        self.que2.get_static_pad('src').link(self.mix_sink_pad2)
 
+        self.que2.get_static_pad('src').link(self.mix_sink_pad1)
         self.que2.set_state(Gst.State.PLAYING)
 
+        print('called probe_cb2 END')
         return Gst.PadProbeReturn.REMOVE
 
     def probe_cb(self, pad, info):
-        print('called probe_cb')
+        print('called probe_cb START')
 
         self.que1.set_state(Gst.State.NULL)
 
@@ -143,21 +144,23 @@ class Launcher:
         self.que1 = Gst.ElementFactory.make('queue')
         self.pipeline.add(self.que1)
         self.tee1.link(self.que1)
-        self.que1.get_static_pad('src').link(self.mix_sink_pad1)
-
-        self.que1.set_state(Gst.State.PLAYING)
 
         srcpad = self.src2.get_static_pad('src')
         srcpad.add_probe(Gst.PadProbeType.IDLE, self.probe_cb2)
 
+        self.que1.get_static_pad('src').link(self.mix_sink_pad2)
+        self.que1.set_state(Gst.State.PLAYING)
+
+        print('called probe_cb END')
         return Gst.PadProbeReturn.REMOVE
 
     def timeout_cb(self):
-        print('called timeout_cb')
+        print('called timeout_cb START')
 
         srcpad = self.src1.get_static_pad('src')
         srcpad.add_probe(Gst.PadProbeType.IDLE, self.probe_cb)
 
+        print('called timeout_cb END')
         return True
 
 
