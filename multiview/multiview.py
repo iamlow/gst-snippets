@@ -96,10 +96,9 @@ class MediaSource:
             print("error!")
 
     def link(self, pad, name):
-        tee_que = Gst.ElementFactory.make('queue', name)
-        self.pipeline.add(tee_que)
-        self.v_tee.link(tee_que)
-        tee_que.get_static_pad('src').link(pad)
+        mm = MediaMediator(self.pipeline, name, 480, 270)
+        self.v_tee.link(mm.get_sink())
+        mm.get_src().get_static_pad('src').link(pad)
 
     def unlink(self, name):
         self.pipeline.remove(self.pipeline.get_by_name(name))
@@ -109,14 +108,50 @@ class MediaSource:
         self.link(pad, new_name)
 
 
+class MediaMediator:
+    def __init__(self, pipeline, name, width, height):
+        self.pipeline = pipeline
+
+        # Make elements
+        self.v_que = Gst.ElementFactory.make('queue', name)
+        self.v_to = Gst.ElementFactory.make('textoverlay')
+        self.v_conv = Gst.ElementFactory.make('nvvidconv')
+        self.v_caps = Gst.ElementFactory.make('capsfilter')
+
+        self.pipeline.add(self.v_que)
+        self.pipeline.add(self.v_to)
+        self.pipeline.add(self.v_conv)
+        self.pipeline.add(self.v_caps)
+
+        self.v_to.set_property('text', 'ch')
+        self.v_to.set_property('valignment', 'top')
+        self.v_to.set_property('halignment', 'left')
+        self.v_to.set_property('font-desc', 'Sans, 20')
+
+        caps_prop = Gst.Caps.from_string('video/x-raw, width=(int)%d, height=(int)%d' % (width, height))
+        self.v_caps.set_property('caps', caps_prop)
+
+        self.v_que.link(self.v_to)
+        self.v_to.link(self.v_conv)
+        self.v_conv.link(self.v_caps)
+
+    def get_sink(self):
+        return self.v_que
+
+    def get_src(self):
+        return  self.v_caps
+
+
 class MediaSink:
     def __init__(self, pipeline):
         self.pipeline = pipeline
 
         # Make elements
         self.v_comp = Gst.ElementFactory.make('nvcompositor')
-        self.v_sink = Gst.ElementFactory.make('nvoverlaysink')
-
+        self.v_sink = Gst.ElementFactory.make('fpsdisplaysink')
+        # self.v_sink.set_property('video-sink', 'nvoverlaysink')
+        self.v_sink.set_property('text-overlay', False)
+        self.v_sink.set_property('signal-fps-measurements', True)
         self.v_sink.set_property('sync', 'true')
 
         # Add elements
@@ -152,26 +187,32 @@ class Launcher:
         self.media_sources = []
         self.media_sources.append(MediaSource(self.pipeline, args[1]))
         self.media_sources.append(MediaSource(self.pipeline, args[2]))
+        self.media_sources.append(MediaSource(self.pipeline, args[3]))
+        self.media_sources.append(MediaSource(self.pipeline, args[4]))
+        self.media_sources.append(MediaSource(self.pipeline, args[5]))
+        self.media_sources.append(MediaSource(self.pipeline, args[6]))
         self.media_sink = MediaSink(self.pipeline)
 
         self.media_sources[0].link(self.media_sink.request_pad(0, 0, 960, 540, 'PRE'), 'PRE')
         self.media_sources[1].link(self.media_sink.request_pad(960, 0, 960, 540, 'PGM'), 'PGM')
         self.media_sources[0].link(self.media_sink.request_pad(0, 540, 480, 270), '1')
-        self.media_sources[0].link(self.media_sink.request_pad(480, 540, 480, 270), '2')
-        self.media_sources[0].link(self.media_sink.request_pad(960, 540, 480, 270), '3')
-        self.media_sources[1].link(self.media_sink.request_pad(0, 810, 480, 270), '4')
-        self.media_sources[1].link(self.media_sink.request_pad(480, 810, 480, 270), '5')
-        self.media_sources[1].link(self.media_sink.request_pad(960, 810, 480, 270), '6')
+        self.media_sources[1].link(self.media_sink.request_pad(480, 540, 480, 270), '2')
+        self.media_sources[2].link(self.media_sink.request_pad(960, 540, 480, 270), '3')
+        self.media_sources[3].link(self.media_sink.request_pad(0, 810, 480, 270), '4')
+        self.media_sources[4].link(self.media_sink.request_pad(480, 810, 480, 270), '5')
+        self.media_sources[5].link(self.media_sink.request_pad(960, 810, 480, 270), '6')
 
         self.loop = ''
 
         self.flag = False
 
     def execute(self):
+        self.pipeline.connect('deep-notify', self.notify)
+
         # create and event loop and feed gstreamer bus messages to it
         self.loop = GLib.MainLoop()
 
-        GLib.timeout_add_seconds(3, self.timeout_cb)
+        # GLib.timeout_add_seconds(3, self.timeout_cb)
 
         bus = self.pipeline.get_bus()
         bus.add_signal_watch()
@@ -242,7 +283,7 @@ class Launcher:
 
 
 def main(args):
-    if len(args) != 3:
+    if len(args) != 7:
         sys.stderr.write('usage: %s <media file or uri>\n' % args[0])
         sys.exit(1)
 
