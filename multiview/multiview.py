@@ -95,8 +95,8 @@ class MediaSource:
         else:
             print("error!")
 
-    def link(self, pad, name):
-        mm = MediaMediator(self.pipeline, name, 480, 270)
+    def link(self, pad, name, width = 480, height = 270):
+        mm = MediaMediator(self.pipeline, name, width, height)
         self.v_tee.link(mm.get_sink())
         mm.get_src().get_static_pad('src').link(pad)
 
@@ -123,12 +123,16 @@ class MediaMediator:
         self.pipeline.add(self.v_conv)
         self.pipeline.add(self.v_caps)
 
-        self.v_to.set_property('text', 'ch')
+        self.v_to.set_property('text', name)
         self.v_to.set_property('valignment', 'top')
         self.v_to.set_property('halignment', 'left')
         self.v_to.set_property('font-desc', 'Sans, 20')
 
-        caps_prop = Gst.Caps.from_string('video/x-raw, width=(int)%d, height=(int)%d' % (width, height))
+        if width != 0 and height != 0:
+            caps_prop = Gst.Caps.from_string('video/x-raw, width=(int)%d, height=(int)%d' % (width, height))
+        else:
+            caps_prop = Gst.Caps.from_string('video/x-raw')
+
         self.v_caps.set_property('caps', caps_prop)
 
         self.v_que.link(self.v_to)
@@ -179,6 +183,79 @@ class MediaSink:
         return self.v_comp_sink_pads[name]
 
 
+class MediaRtmpSink:
+    def __init__(self, pipeline):
+        self.pipeline = pipeline
+
+        # Make elements
+        self.v_pgm_que = Gst.ElementFactory.make('queue')
+        self.v_pre_que = Gst.ElementFactory.make('queue')
+        self.v_comp = Gst.ElementFactory.make('glvideomixer')
+        self.v_comp_que = Gst.ElementFactory.make('queue')
+        self.v_enc = Gst.ElementFactory.make('omxh264enc')
+        self.v_parse = Gst.ElementFactory.make('h264parse')
+        self.mux = Gst.ElementFactory.make('flvmux')
+        self.mux_tee = Gst.ElementFactory.make('tee')
+        self.sink = Gst.ElementFactory.make('rtmpsink')
+
+        # Add elements
+        self.pipeline.add(self.v_pgm_que)
+        self.pipeline.add(self.v_pre_que)
+        self.pipeline.add(self.v_comp)
+        self.pipeline.add(self.v_comp_que)
+        self.pipeline.add(self.v_enc)
+        self.pipeline.add(self.v_parse)
+        self.pipeline.add(self.mux)
+        self.pipeline.add(self.mux_tee)
+        self.pipeline.add(self.sink)
+
+        # Set elements
+        self.mux.set_property('streamable', True)
+        self.sink.set_property('location', 'rtmp://192.168.0.11/live/s0')
+
+        # Link elements
+        self.v_comp_sink_pads = {}
+
+        comp_sink_pad_temp = self.v_comp.get_pad_template('sink_%u')
+        self.v_comp_sink_pads['PGM'] = self.v_comp.request_pad(comp_sink_pad_temp, None, None)
+
+        self.v_comp_sink_pads['PGM'].set_property('xpos', 0)
+        self.v_comp_sink_pads['PGM'].set_property('ypos', 0)
+        self.v_comp_sink_pads['PGM'].set_property('width', 1920)
+        self.v_comp_sink_pads['PGM'].set_property('height', 1080)
+
+        self.v_comp_sink_pads['PRE'] = self.v_comp.request_pad(comp_sink_pad_temp, None, None)
+
+        self.v_comp_sink_pads['PRE'].set_property('xpos', 1220)
+        self.v_comp_sink_pads['PRE'].set_property('ypos', 660)
+        self.v_comp_sink_pads['PRE'].set_property('width', 640)
+        self.v_comp_sink_pads['PRE'].set_property('height', 360)
+
+        self.v_pgm_que.get_static_pad('src').link(self.v_comp_sink_pads['PGM'])
+        self.v_pre_que.get_static_pad('src').link(self.v_comp_sink_pads['PRE'])
+        self.v_comp.link(self.v_comp_que)
+        self.v_comp_que.link(self.v_enc)
+        self.v_enc.link(self.mux)
+        self.mux.link(self.mux_tee)
+        self.mux_tee.link(self.sink)
+
+    def request_pad(self, xpos, ypos, width, height, name=None):
+        comp_sink_pad_temp = self.v_comp.get_pad_template('sink_%u')
+        comp_sink_pad = self.v_comp.request_pad(comp_sink_pad_temp, None, None)
+
+        comp_sink_pad.set_property('xpos', xpos)
+        comp_sink_pad.set_property('ypos', ypos)
+        comp_sink_pad.set_property('width', width)
+        comp_sink_pad.set_property('height', height)
+
+        self.v_comp_sink_pads[name] = comp_sink_pad
+
+        return comp_sink_pad
+
+    def get_pad(self, name):
+        return self.v_comp_sink_pads[name]
+
+
 class Launcher:
     def __init__(self, args):
         Gst.init(None)
@@ -193,10 +270,14 @@ class Launcher:
         self.media_sources.append(MediaSource(self.pipeline, args[6]))
         self.media_sink = MediaSink(self.pipeline)
 
-        self.media_sources[0].link(self.media_sink.request_pad(0, 0, 960, 540, 'PRE'), 'PRE')
-        self.media_sources[1].link(self.media_sink.request_pad(960, 0, 960, 540, 'PGM'), 'PGM')
-        self.media_sources[0].link(self.media_sink.request_pad(0, 540, 480, 270), '1')
-        self.media_sources[1].link(self.media_sink.request_pad(480, 540, 480, 270), '2')
+        self.media_rtmp_sink = MediaRtmpSink(self.pipeline)
+        self.media_sources[0].v_tee.link(self.media_rtmp_sink.v_pgm_que)
+        self.media_sources[1].v_tee.link(self.media_rtmp_sink.v_pre_que)
+
+        self.media_sources[0].link(self.media_sink.request_pad(0, 0, 960, 540, 'PRE'), 'PRE', 960, 540)
+        self.media_sources[1].link(self.media_sink.request_pad(960, 0, 960, 540, 'PGM'), 'PGM', 960, 540)
+        self.media_sources[0].link(self.media_sink.request_pad(0, 540, 480, 270), '1', 0, 0)
+        self.media_sources[1].link(self.media_sink.request_pad(480, 540, 480, 270), '2', 0, 0)
         self.media_sources[2].link(self.media_sink.request_pad(960, 540, 480, 270), '3')
         self.media_sources[3].link(self.media_sink.request_pad(0, 810, 480, 270), '4')
         self.media_sources[4].link(self.media_sink.request_pad(480, 810, 480, 270), '5')
@@ -207,7 +288,7 @@ class Launcher:
         self.flag = False
 
     def execute(self):
-        self.pipeline.connect('deep-notify', self.notify)
+        # self.pipeline.connect('deep-notify', self.notify)
 
         # create and event loop and feed gstreamer bus messages to it
         self.loop = GLib.MainLoop()
