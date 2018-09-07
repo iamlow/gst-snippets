@@ -22,9 +22,21 @@ cmd += ' sink_9::xpos=1440  sink_9::ypos=810    sink_9::width=480   sink_9::heig
 # cmd += ' ! nvoverlaysink'
 cmd += ' ! fpsdisplaysink video-sink=nvoverlaysink text-overlay=false signal-fps-measurements=true sync=true'
 
+# cmd += ' rtmpsrc location=\'' + argv[5] + '\''
+# cmd += ' ! flvdemux name=dex4'
+# cmd += ' dex4.video ! queue max-size-buffers=3 ! h264parse ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t4'
+# cmd += ' dex4.audio ! queue ! fakesink'
+
+# cmd += ' rtmpsrc location=\'' + argv[5] + '\''
+# cmd += ' ! flvdemux name=dex4a'
+# cmd += ' dex4a.video ! queue max-size-buffers=3 ! h264parse ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t4a'
+# cmd += ' dex4a.audio ! queue ! fakesink'
+
 cmd += ' rtmpsrc location=\'' + argv[5] + '\''
 cmd += ' ! flvdemux name=dex4'
-cmd += ' dex4.video ! queue max-size-buffers=3 ! h264parse ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t4'
+cmd += ' dex4.video ! queue max-size-buffers=3 ! h264parse ! tee name=kk'
+cmd += ' kk. ! queue ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t4'
+cmd += ' kk. ! queue ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t4a'
 cmd += ' dex4.audio ! queue ! fakesink'
 
 cmd += ' rtmpsrc location=\'' + argv[2] + '\''
@@ -51,13 +63,14 @@ cmd += ' dex8.audio ! queue ! fakesink'
 # cmd += ' t4. ! queue ! omxh264enc ! h264parse ! queue ! flvmux name=mux ! rtmpsink location=rtmp://192.168.0.11/live/s0'
 
 cmd += ' glvideomixer name=glvm'
-cmd += ' sink_0::xpos=0 sink_0::ypos=0 sink_0::width=1920 sink_0::height=1080'
-cmd += ' sink_1::xpos=1380 sink_1::ypos=750 sink_1::width=480 sink_1::height=270'
+cmd += ' sink_0::xpos=0 sink_0::ypos=0 '
+# cmd += ' sink_1::xpos=1380 sink_1::ypos=750 sink_1::width=480 sink_1::height=270'
+cmd += ' sink_1::xpos=1220 sink_1::ypos=660 sink_1::width=640 sink_1::height=360'
 # cmd += ' ! queue ! omxh264enc ! h264parse ! queue ! flvmux name=mux ! rtmpsink location=rtmp://192.168.0.11/live/s0'
 cmd += ' ! queue ! omxh264enc ! h264parse ! queue ! flvmux name=mux ! tee name=pip'
 cmd += ' pip. ! queue ! rtmpsink location=rtmp://a.rtmp.youtube.com/live2/ws8c-p19s-tc2g-3puj'
 cmd += ' pip. ! queue ! rtmpsink location=rtmp://192.168.0.11/live/s0'
-cmd += ' t4. ! queue ! glvm.sink_0'
+cmd += ' t4a. ! queue ! glvm.sink_0'
 cmd += ' t5. ! queue ! glvm.sink_1'
 
 # cmd += ' audiotestsrc is-live=true'
@@ -71,15 +84,17 @@ cmd += ' dex9.video ! queue max-size-buffers=3 ! h264parse ! omxh264dec disable-
 cmd += ' dex9.audio ! queue ! mux.audio'
 
 cmd += ' t4. ! queue ! textoverlay text=\'PRE\' valignment=top halignment=left font-desc="Sans, 20" ! \'video/x-raw, width=(int)960, height=(int)540\' ! mix.sink_0'
+# cmd += ' t4. ! queue ! textoverlay text=\'PRE\' valignment=top halignment=left font-desc="Sans, 20" ! mix.sink_0'
 # cmd += ' t5. ! queue ! nvvidconv ! \'video/x-raw, width=(int)960, height=(int)540\' ! mix.sink_1'
 cmd += ' t5. ! queue ! textoverlay text=\'PGM\' valignment=top halignment=left font-desc="Sans, 20" ! \'video/x-raw, width=(int)960, height=(int)540\' ! mix.sink_1'
+# cmd += ' t5. ! queue ! textoverlay text=\'PGM\' valignment=top halignment=left font-desc="Sans, 20" ! mix.sink_1'
 
-cmd += ' t4. ! queue ! textoverlay text=\'Channel 1\' valignment=top halignment=left font-desc="Sans, 20" ! mix.sink_2'
-cmd += ' t5. ! queue ! textoverlay text=\'Channel 2\' valignment=top halignment=left font-desc="Sans, 20" ! mix.sink_3'
-cmd += ' t6. ! queue ! textoverlay text=\'Channel 3\' valignment=top halignment=left font-desc="Sans, 20" ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! mix.sink_4'
-cmd += ' t7. ! queue ! textoverlay text=\'Channel 4\' valignment=top halignment=left font-desc="Sans, 20" ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! mix.sink_6'
-cmd += ' t8. ! queue ! textoverlay text=\'Channel 5\' valignment=top halignment=left font-desc="Sans, 20" ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! mix.sink_7'
-cmd += ' t9. ! queue ! textoverlay text=\'Channel 6\' valignment=top halignment=left font-desc="Sans, 20" ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! mix.sink_8'
+cmd += ' t4. ! queue ! textoverlay text=\'Channel 1\' valignment=top halignment=left xpad=50 ypad=50 font-desc="Sans, 20" ! mix.sink_2'
+cmd += ' t5. ! queue ! textoverlay text=\'Channel 2\' valignment=top halignment=left xpad=50 ypad=50 font-desc="Sans, 20" ! mix.sink_3'
+cmd += ' t6. ! queue ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! textoverlay text=\'Channel 3\' valignment=top halignment=left font-desc="Sans, 20" ! mix.sink_4'
+cmd += ' t7. ! queue ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! textoverlay text=\'Channel 4\' valignment=top halignment=left font-desc="Sans, 20" ! mix.sink_6'
+cmd += ' t8. ! queue ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! textoverlay text=\'Channel 5\' valignment=top halignment=left font-desc="Sans, 20" ! mix.sink_7'
+cmd += ' t9. ! queue ! nvvidconv ! \'video/x-raw, width=(int)480, height=(int)270\' ! textoverlay text=\'Channel 6\' valignment=top halignment=left font-desc="Sans, 20" ! mix.sink_8'
 
 print cmd
 system(cmd)
