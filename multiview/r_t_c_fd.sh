@@ -34,9 +34,9 @@ cmd += ' ! fpsdisplaysink video-sink=nvoverlaysink text-overlay=false signal-fps
 
 cmd += ' rtmpsrc location=\'' + argv[5] + '\''
 cmd += ' ! flvdemux name=dex4'
-cmd += ' dex4.video ! queue max-size-buffers=3 ! h264parse ! tee name=kk'
-cmd += ' kk. ! queue ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t4'
-cmd += ' kk. ! queue ! omxh264dec disable-dpb=true ! nvvidconv ! \'video/x-raw\' ! tee name=t4a'
+cmd += ' dex4.video ! queue max-size-buffers=3 ! h264parse ! omxh264dec disable-dpb=true ! tee name=kk'
+cmd += ' kk. ! queue ! nvvidconv ! \'video/x-raw\' ! tee name=t4'
+cmd += ' kk. ! queue ! nvvidconv ! \'video/x-raw\' ! tee name=t4a'
 cmd += ' dex4.audio ! queue ! fakesink'
 
 cmd += ' rtmpsrc location=\'' + argv[2] + '\''
