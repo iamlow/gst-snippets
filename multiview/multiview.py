@@ -100,7 +100,7 @@ class MediaMediator(object):
         self.pipeline = pipeline
 
         # Make elements
-        self.v_que = Gst.ElementFactory.make('queue', name)
+        self.v_que = Gst.ElementFactory.make('queue')
         self.v_conv = Gst.ElementFactory.make('nvvidconv')
         self.v_caps = Gst.ElementFactory.make('capsfilter')
         self.v_to = Gst.ElementFactory.make('textoverlay')
@@ -346,8 +346,8 @@ class Launcher:
         self.media_mediators[7].link_pad(self.media_sink.get_sink_pad('CH6'))
 
         self.media_mediator_tees = []
-        self.media_mediator_tees.append(MediaMediatorTee(self.pipeline, 'MAIN', 1920, 1080))
-        self.media_mediator_tees.append(MediaMediatorTee(self.pipeline, 'SUB', 640, 360))
+        self.media_mediator_tees.append(MediaMediatorTee(self.pipeline, 'PGM', 1920, 1080))
+        self.media_mediator_tees.append(MediaMediatorTee(self.pipeline, 'PRE', 640, 360))
 
         self.media_enc_mux = MediaEncMux(self.pipeline)
 
