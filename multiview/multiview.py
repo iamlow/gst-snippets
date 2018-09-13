@@ -5,7 +5,7 @@ Multiply viewer.
 """
 
 import sys
-
+from collections import OrderedDict
 import gi
 gi.require_version('Gst', '1.0')
 gi.require_version('GLib', '2.0')
@@ -132,7 +132,7 @@ class MediaMediator(object):
     def get_src(self):
         return self.v_to
 
-    def link(self, pad):
+    def link_pad(self, pad):
         self.get_src().get_static_pad('src').link(pad)
 
 
@@ -146,12 +146,12 @@ class MediaMediatorTee(MediaMediator):
     def get_src(self):
         return self.v_tee
 
-    def link(self, pad):
+    def link_pad(self, pad):
         self.get_src().request_pad(
             self.get_src().get_pad_template('src_%u'), None, None).link(pad)
 
 
-class MediaSink:
+class MediaMultiViewSink:
     def __init__(self, pipeline):
         self.pipeline = pipeline
 
@@ -171,7 +171,25 @@ class MediaSink:
 
         self.v_comp_sink_pads = {}
 
-    def request_pad(self, xpos, ypos, width, height, name):
+        self.set_sink_pads()
+
+    def set_sink_pads(self):
+        v_comp_matrix = [
+            ['PRE', 0, 0, 960, 540],
+            ['PGM', 960, 0, 960, 540],
+            ['CH1', 0, 540, 480, 270],
+            ['CH2', 480, 540, 480, 270],
+            ['CH3', 960, 540, 480, 270],
+            ['CH4', 0, 810, 480, 270],
+            ['CH5', 480, 810, 480, 270],
+            ['CH6', 960, 810, 480, 270],
+        ]
+
+        for v in v_comp_matrix:
+            # print(v)
+            self.set_sink_pad(v[1], v[2], v[3], v[4], v[0])
+
+    def set_sink_pad(self, xpos, ypos, width, height, name):
         comp_sink_pad_temp = self.v_comp.get_pad_template('sink_%u')
         comp_sink_pad = self.v_comp.request_pad(comp_sink_pad_temp, None, None)
 
@@ -182,13 +200,11 @@ class MediaSink:
 
         self.v_comp_sink_pads[name] = comp_sink_pad
 
-        return comp_sink_pad
-
-    def get_pad(self, name):
+    def get_sink_pad(self, name):
         return self.v_comp_sink_pads[name]
 
 
-class MediaRtmpSink:
+class MediaEncMux:
     def __init__(self, pipeline):
         self.pipeline = pipeline
 
@@ -199,7 +215,6 @@ class MediaRtmpSink:
         self.v_parse = Gst.ElementFactory.make('h264parse')
         self.mux = Gst.ElementFactory.make('flvmux')
         self.mux_tee = Gst.ElementFactory.make('tee')
-        self.sink = Gst.ElementFactory.make('rtmpsink')
 
         # Add elements
         self.pipeline.add(self.v_comp)
@@ -208,11 +223,9 @@ class MediaRtmpSink:
         self.pipeline.add(self.v_parse)
         self.pipeline.add(self.mux)
         self.pipeline.add(self.mux_tee)
-        self.pipeline.add(self.sink)
 
         # Set elements
         self.mux.set_property('streamable', True)
-        self.sink.set_property('location', 'rtmp://192.168.0.11/live/s0')
 
         # Link elements
         self.v_comp_sink_pads = {}
@@ -222,9 +235,31 @@ class MediaRtmpSink:
         self.v_enc.link(self.v_parse)
         self.v_parse.link(self.mux)
         self.mux.link(self.mux_tee)
-        self.mux_tee.link(self.sink)
 
-    def request_pad(self, xpos, ypos, width, height, name):
+        self.set_sink_pads()
+
+    def set_sink_pads(self):
+        v_comp_matrix = [
+            ['PGM', 0, 0, 1920, 1080],
+            ['PRE', 1220, 660, 640, 360],
+        ]
+
+        for v in v_comp_matrix:
+            # print(v)
+            self.set_sink_pad(v[1], v[2], v[3], v[4], v[0])
+
+    def set_sink_pad(self, xpos, ypos, width, height, name):
+        comp_sink_pad_temp = self.v_comp.get_pad_template('sink_%u')
+        comp_sink_pad = self.v_comp.request_pad(comp_sink_pad_temp, None, None)
+
+        comp_sink_pad.set_property('xpos', xpos)
+        comp_sink_pad.set_property('ypos', ypos)
+        comp_sink_pad.set_property('width', width)
+        comp_sink_pad.set_property('height', height)
+
+        self.v_comp_sink_pads[name] = comp_sink_pad
+
+    def get_sink_pad(self, xpos, ypos, width, height, name):
         comp_sink_pad_temp = self.v_comp.get_pad_template('sink_%u')
         comp_sink_pad = self.v_comp.request_pad(comp_sink_pad_temp, None, None)
 
@@ -237,8 +272,33 @@ class MediaRtmpSink:
 
         return comp_sink_pad
 
-    def get_pad(self, name):
+    def get_sink_pad(self, name):
         return self.v_comp_sink_pads[name]
+
+    def link(self, element):
+        self.mux_tee.link(element)
+
+
+class MediaRtmpSink:
+    def __init__(self, pipeline, location):
+        self.pipeline = pipeline
+
+        # Make elements
+        self.que = Gst.ElementFactory.make('queue')
+        self.sink = Gst.ElementFactory.make('rtmpsink')
+
+        # Add elements
+        self.pipeline.add(self.que)
+        self.pipeline.add(self.sink)
+
+        # Set elements
+        self.sink.set_property('location', location)
+
+        # Link elements
+        self.que.link(self.sink)
+
+    def get_sink(self):
+        return self.que
 
 
 class Launcher:
@@ -265,7 +325,7 @@ class Launcher:
         self.media_mediators.append(MediaMediator(self.pipeline, 'CH5', 480, 270))
         self.media_mediators.append(MediaMediator(self.pipeline, 'CH6', 480, 270))
 
-        self.media_sink = MediaSink(self.pipeline)
+        self.media_sink = MediaMultiViewSink(self.pipeline)
 
         self.media_sources[0].link(self.media_mediators[0].get_sink())
         self.media_sources[1].link(self.media_mediators[1].get_sink())
@@ -276,25 +336,31 @@ class Launcher:
         self.media_sources[4].link(self.media_mediators[6].get_sink())
         self.media_sources[5].link(self.media_mediators[7].get_sink())
 
-        self.media_mediators[0].link(self.media_sink.request_pad(0, 0, 960, 540, 'PRE'))
-        self.media_mediators[1].link(self.media_sink.request_pad(960, 0, 960, 540, 'PGM'))
-        self.media_mediators[2].link(self.media_sink.request_pad(0, 540, 480, 270, 'CH1'))
-        self.media_mediators[3].link(self.media_sink.request_pad(480, 540, 480, 270, 'CH2'))
-        self.media_mediators[4].link(self.media_sink.request_pad(960, 540, 480, 270, 'CH3'))
-        self.media_mediators[5].link(self.media_sink.request_pad(0, 810, 480, 270, 'CH4'))
-        self.media_mediators[6].link(self.media_sink.request_pad(480, 810, 480, 270, 'CH5'))
-        self.media_mediators[7].link(self.media_sink.request_pad(960, 810, 480, 270, 'CH6'))
-
-        self.media_rtmp_sink = MediaRtmpSink(self.pipeline)
+        self.media_mediators[0].link_pad(self.media_sink.get_sink_pad('PRE'))
+        self.media_mediators[1].link_pad(self.media_sink.get_sink_pad('PGM'))
+        self.media_mediators[2].link_pad(self.media_sink.get_sink_pad('CH1'))
+        self.media_mediators[3].link_pad(self.media_sink.get_sink_pad('CH2'))
+        self.media_mediators[4].link_pad(self.media_sink.get_sink_pad('CH3'))
+        self.media_mediators[5].link_pad(self.media_sink.get_sink_pad('CH4'))
+        self.media_mediators[6].link_pad(self.media_sink.get_sink_pad('CH5'))
+        self.media_mediators[7].link_pad(self.media_sink.get_sink_pad('CH6'))
 
         self.media_mediator_tees = []
         self.media_mediator_tees.append(MediaMediatorTee(self.pipeline, 'MAIN', 1920, 1080))
         self.media_mediator_tees.append(MediaMediatorTee(self.pipeline, 'SUB', 640, 360))
 
+        self.media_enc_mux = MediaEncMux(self.pipeline)
+
         self.media_sources[0].link(self.media_mediator_tees[0].get_sink())
         self.media_sources[1].link(self.media_mediator_tees[1].get_sink())
-        self.media_mediator_tees[0].link(self.media_rtmp_sink.request_pad(0, 0, 1920, 1080, 'PGM'))
-        self.media_mediator_tees[1].link(self.media_rtmp_sink.request_pad(1220, 660, 640, 360, 'PRE'))
+        self.media_mediator_tees[0].link_pad(self.media_enc_mux.get_sink_pad('PGM'))
+        self.media_mediator_tees[1].link_pad(self.media_enc_mux.get_sink_pad('PRE'))
+
+        self.media_rtmp_sink1 = MediaRtmpSink(self.pipeline, 'rtmp://192.168.0.11/live/s0')
+        self.media_enc_mux.link(self.media_rtmp_sink1.get_sink())
+
+        self.media_rtmp_sink2 = MediaRtmpSink(self.pipeline, 'rtmp://192.168.0.11/live/s00')
+        self.media_enc_mux.link(self.media_rtmp_sink2.get_sink())
 
         self.loop = ''
 
