@@ -30,10 +30,11 @@ cmd += ' ! fpsdisplaysink video-sink=nvoverlaysink text-overlay=false signal-fps
 # pip and transfer
 cmd += ' glvideomixer name=glvm'
 cmd += ' sink_0::xpos=0 sink_0::ypos=0'
-cmd += ' sink_1::xpos=1220 sink_1::ypos=660 sink_1::width=640 sink_1::height=360'
+# cmd += ' sink_1::xpos=1220 sink_1::ypos=660 sink_1::width=640 sink_1::height=360'
+cmd += ' sink_1::xpos=1220 sink_1::ypos=660'
 cmd += ' ! queue ! omxh264enc ! h264parse ! flvmux name=mux ! tee name=pip'
 cmd += ' pip. ! queue ! rtmpsink location=rtmp://a.rtmp.youtube.com/live2/ws8c-p19s-tc2g-3puj'
-cmd += ' pip. ! queue ! rtmpsink location=rtmp://192.168.0.11/live/s0'
+cmd += ' pip. ! queue ! rtmpsink location=rtmp://192.168.0.11/live/s0 sync=true'
 
 # cmd += ' audiotestsrc is-live=true'
 # cmd += ' ! queue'
@@ -87,14 +88,21 @@ cmd += ' dem6.audio ! queue ! fakesink'
 #
 
 # pip & transfer
-cmd += ' t1. ! queue ! nvvidconv ! "video/x-raw" ! tee ! glvm.sink_0'
-cmd += ' t2. ! queue ! nvvidconv ! "video/x-raw" ! tee ! glvm.sink_1'
+cmd += ' t1. ! queue'
+cmd += ' ! nvvidconv ! "video/x-raw"'
+cmd += ' ! textoverlay text=\"Main\" valignment=top halignment=left font-desc=\"Sans, 20\"'
+cmd += ' ! tee ! glvm.sink_0'
+
+cmd += ' t2. ! queue'
+cmd += ' ! nvvidconv ! "video/x-raw, width=(int)640, height=(int)360"'
+cmd += ' ! textoverlay text=\"Sub\" valignment=top halignment=left font-desc=\"Sans, 20\"'
+cmd += ' ! tee ! glvm.sink_1'
 
 # multiview
 cmd += ' t1. ! queue'
 cmd += ' ! nvvidconv ! \"video/x-raw, width=(int)960, height=(int)540\"'
 cmd += ' ! textoverlay text=\"PRE\" valignment=top halignment=left font-desc=\"Sans, 20\"'
-cmd += ' ! mix.sink_0'
+cmd += ' ! tee ! mix.sink_0'
 
 cmd += ' t2. ! queue'
 cmd += ' ! nvvidconv ! \"video/x-raw, width=(int)960, height=(int)540\"'
