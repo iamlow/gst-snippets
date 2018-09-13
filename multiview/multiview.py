@@ -20,14 +20,9 @@ class MediaSource:
         # Make elements
         self.src = Gst.ElementFactory.make('rtmpsrc')
         self.demux = Gst.ElementFactory.make('flvdemux')
-
         self.v_que = Gst.ElementFactory.make('queue')
         self.v_parse = Gst.ElementFactory.make('h264parse')
-
         self.v_dec = Gst.ElementFactory.make('omxh264dec')
-        self.v_conv = Gst.ElementFactory.make('nvvidconv')
-
-        self.v_caps = Gst.ElementFactory.make('capsfilter')
         self.v_tee = Gst.ElementFactory.make('tee')
 
         self.a_que = Gst.ElementFactory.make('queue')
@@ -39,8 +34,6 @@ class MediaSource:
         self.pipeline.add(self.v_que)
         self.pipeline.add(self.v_parse)
         self.pipeline.add(self.v_dec)
-        self.pipeline.add(self.v_conv)
-        self.pipeline.add(self.v_caps)
         self.pipeline.add(self.v_tee)
 
         self.pipeline.add(self.a_que)
@@ -54,18 +47,13 @@ class MediaSource:
 
         self.src.set_property('location', self.uri)
 
-        caps_prop = Gst.Caps.from_string('video/x-raw')
-        self.v_caps.set_property('caps', caps_prop)
-
         # Link elements
         self.src.link(self.demux)
         self.demux.connect('pad-added', self.pad_added_handler)
 
         self.v_que.link(self.v_parse)
         self.v_parse.link(self.v_dec)
-        self.v_dec.link(self.v_conv)
-        self.v_conv.link(self.v_caps)
-        self.v_caps.link(self.v_tee)
+        self.v_dec.link(self.v_tee)
 
         self.a_que.link(self.a_sink)
 
@@ -95,10 +83,8 @@ class MediaSource:
         else:
             print("error!")
 
-    def link(self, pad, name, width = 480, height = 270):
-        mm = MediaMediator(self.pipeline, name, width, height)
-        self.v_tee.link(mm.get_sink())
-        mm.get_src().get_static_pad('src').link(pad)
+    def link(self, element):
+        self.v_tee.link(element)
 
     def unlink(self, name):
         self.pipeline.remove(self.pipeline.get_by_name(name))
@@ -108,20 +94,21 @@ class MediaSource:
         self.link(pad, new_name)
 
 
-class MediaMediator:
+class MediaMediator(object):
     def __init__(self, pipeline, name, width, height):
+        self.name = self.__class__.__name__
         self.pipeline = pipeline
 
         # Make elements
         self.v_que = Gst.ElementFactory.make('queue', name)
-        self.v_to = Gst.ElementFactory.make('textoverlay')
         self.v_conv = Gst.ElementFactory.make('nvvidconv')
         self.v_caps = Gst.ElementFactory.make('capsfilter')
+        self.v_to = Gst.ElementFactory.make('textoverlay')
 
         self.pipeline.add(self.v_que)
-        self.pipeline.add(self.v_to)
         self.pipeline.add(self.v_conv)
         self.pipeline.add(self.v_caps)
+        self.pipeline.add(self.v_to)
 
         self.v_to.set_property('text', name)
         self.v_to.set_property('valignment', 'top')
@@ -135,15 +122,33 @@ class MediaMediator:
 
         self.v_caps.set_property('caps', caps_prop)
 
-        self.v_que.link(self.v_to)
-        self.v_to.link(self.v_conv)
+        self.v_que.link(self.v_conv)
         self.v_conv.link(self.v_caps)
+        self.v_caps.link(self.v_to)
 
     def get_sink(self):
         return self.v_que
 
     def get_src(self):
-        return  self.v_caps
+        return self.v_to
+
+    def link(self, pad):
+        self.get_src().get_static_pad('src').link(pad)
+
+
+class MediaMediatorTee(MediaMediator):
+    def __init__(self, pipeline, name, width, height):
+        super(MediaMediatorTee, self).__init__(pipeline, name, width, height)
+        self.v_tee = Gst.ElementFactory.make('tee')
+        self.pipeline.add(self.v_tee)
+        self.v_to.link(self.v_tee)
+
+    def get_src(self):
+        return self.v_tee
+
+    def link(self, pad):
+        self.get_src().request_pad(
+            self.get_src().get_pad_template('src_%u'), None, None).link(pad)
 
 
 class MediaSink:
@@ -166,7 +171,7 @@ class MediaSink:
 
         self.v_comp_sink_pads = {}
 
-    def request_pad(self, xpos, ypos, width, height, name=None):
+    def request_pad(self, xpos, ypos, width, height, name):
         comp_sink_pad_temp = self.v_comp.get_pad_template('sink_%u')
         comp_sink_pad = self.v_comp.request_pad(comp_sink_pad_temp, None, None)
 
@@ -188,8 +193,6 @@ class MediaRtmpSink:
         self.pipeline = pipeline
 
         # Make elements
-        self.v_pgm_que = Gst.ElementFactory.make('queue')
-        self.v_pre_que = Gst.ElementFactory.make('queue')
         self.v_comp = Gst.ElementFactory.make('glvideomixer')
         self.v_comp_que = Gst.ElementFactory.make('queue')
         self.v_enc = Gst.ElementFactory.make('omxh264enc')
@@ -199,8 +202,6 @@ class MediaRtmpSink:
         self.sink = Gst.ElementFactory.make('rtmpsink')
 
         # Add elements
-        self.pipeline.add(self.v_pgm_que)
-        self.pipeline.add(self.v_pre_que)
         self.pipeline.add(self.v_comp)
         self.pipeline.add(self.v_comp_que)
         self.pipeline.add(self.v_enc)
@@ -216,30 +217,14 @@ class MediaRtmpSink:
         # Link elements
         self.v_comp_sink_pads = {}
 
-        comp_sink_pad_temp = self.v_comp.get_pad_template('sink_%u')
-        self.v_comp_sink_pads['PGM'] = self.v_comp.request_pad(comp_sink_pad_temp, None, None)
-
-        self.v_comp_sink_pads['PGM'].set_property('xpos', 0)
-        self.v_comp_sink_pads['PGM'].set_property('ypos', 0)
-        self.v_comp_sink_pads['PGM'].set_property('width', 1920)
-        self.v_comp_sink_pads['PGM'].set_property('height', 1080)
-
-        self.v_comp_sink_pads['PRE'] = self.v_comp.request_pad(comp_sink_pad_temp, None, None)
-
-        self.v_comp_sink_pads['PRE'].set_property('xpos', 1220)
-        self.v_comp_sink_pads['PRE'].set_property('ypos', 660)
-        self.v_comp_sink_pads['PRE'].set_property('width', 640)
-        self.v_comp_sink_pads['PRE'].set_property('height', 360)
-
-        self.v_pgm_que.get_static_pad('src').link(self.v_comp_sink_pads['PGM'])
-        self.v_pre_que.get_static_pad('src').link(self.v_comp_sink_pads['PRE'])
         self.v_comp.link(self.v_comp_que)
         self.v_comp_que.link(self.v_enc)
-        self.v_enc.link(self.mux)
+        self.v_enc.link(self.v_parse)
+        self.v_parse.link(self.mux)
         self.mux.link(self.mux_tee)
         self.mux_tee.link(self.sink)
 
-    def request_pad(self, xpos, ypos, width, height, name=None):
+    def request_pad(self, xpos, ypos, width, height, name):
         comp_sink_pad_temp = self.v_comp.get_pad_template('sink_%u')
         comp_sink_pad = self.v_comp.request_pad(comp_sink_pad_temp, None, None)
 
@@ -261,6 +246,7 @@ class Launcher:
         Gst.init(None)
 
         self.pipeline = Gst.Pipeline.new()
+
         self.media_sources = []
         self.media_sources.append(MediaSource(self.pipeline, args[1]))
         self.media_sources.append(MediaSource(self.pipeline, args[2]))
@@ -268,20 +254,47 @@ class Launcher:
         self.media_sources.append(MediaSource(self.pipeline, args[4]))
         self.media_sources.append(MediaSource(self.pipeline, args[5]))
         self.media_sources.append(MediaSource(self.pipeline, args[6]))
+
+        self.media_mediators = []
+        self.media_mediators.append(MediaMediator(self.pipeline, 'PRE', 960, 540))
+        self.media_mediators.append(MediaMediator(self.pipeline, 'PGM', 960, 540))
+        self.media_mediators.append(MediaMediator(self.pipeline, 'CH1', 480, 270))
+        self.media_mediators.append(MediaMediator(self.pipeline, 'CH2', 480, 270))
+        self.media_mediators.append(MediaMediator(self.pipeline, 'CH3', 480, 270))
+        self.media_mediators.append(MediaMediator(self.pipeline, 'CH4', 480, 270))
+        self.media_mediators.append(MediaMediator(self.pipeline, 'CH5', 480, 270))
+        self.media_mediators.append(MediaMediator(self.pipeline, 'CH6', 480, 270))
+
         self.media_sink = MediaSink(self.pipeline)
 
-        self.media_rtmp_sink = MediaRtmpSink(self.pipeline)
-        self.media_sources[0].v_tee.link(self.media_rtmp_sink.v_pgm_que)
-        self.media_sources[1].v_tee.link(self.media_rtmp_sink.v_pre_que)
+        self.media_sources[0].link(self.media_mediators[0].get_sink())
+        self.media_sources[1].link(self.media_mediators[1].get_sink())
+        self.media_sources[0].link(self.media_mediators[2].get_sink())
+        self.media_sources[1].link(self.media_mediators[3].get_sink())
+        self.media_sources[2].link(self.media_mediators[4].get_sink())
+        self.media_sources[3].link(self.media_mediators[5].get_sink())
+        self.media_sources[4].link(self.media_mediators[6].get_sink())
+        self.media_sources[5].link(self.media_mediators[7].get_sink())
 
-        self.media_sources[0].link(self.media_sink.request_pad(0, 0, 960, 540, 'PRE'), 'PRE', 960, 540)
-        self.media_sources[1].link(self.media_sink.request_pad(960, 0, 960, 540, 'PGM'), 'PGM', 960, 540)
-        self.media_sources[0].link(self.media_sink.request_pad(0, 540, 480, 270), '1', 0, 0)
-        self.media_sources[1].link(self.media_sink.request_pad(480, 540, 480, 270), '2', 0, 0)
-        self.media_sources[2].link(self.media_sink.request_pad(960, 540, 480, 270), '3')
-        self.media_sources[3].link(self.media_sink.request_pad(0, 810, 480, 270), '4')
-        self.media_sources[4].link(self.media_sink.request_pad(480, 810, 480, 270), '5')
-        self.media_sources[5].link(self.media_sink.request_pad(960, 810, 480, 270), '6')
+        self.media_mediators[0].link(self.media_sink.request_pad(0, 0, 960, 540, 'PRE'))
+        self.media_mediators[1].link(self.media_sink.request_pad(960, 0, 960, 540, 'PGM'))
+        self.media_mediators[2].link(self.media_sink.request_pad(0, 540, 480, 270, 'CH1'))
+        self.media_mediators[3].link(self.media_sink.request_pad(480, 540, 480, 270, 'CH2'))
+        self.media_mediators[4].link(self.media_sink.request_pad(960, 540, 480, 270, 'CH3'))
+        self.media_mediators[5].link(self.media_sink.request_pad(0, 810, 480, 270, 'CH4'))
+        self.media_mediators[6].link(self.media_sink.request_pad(480, 810, 480, 270, 'CH5'))
+        self.media_mediators[7].link(self.media_sink.request_pad(960, 810, 480, 270, 'CH6'))
+
+        self.media_rtmp_sink = MediaRtmpSink(self.pipeline)
+
+        self.media_mediator_tees = []
+        self.media_mediator_tees.append(MediaMediatorTee(self.pipeline, 'MAIN', 1920, 1080))
+        self.media_mediator_tees.append(MediaMediatorTee(self.pipeline, 'SUB', 640, 360))
+
+        self.media_sources[0].link(self.media_mediator_tees[0].get_sink())
+        self.media_sources[1].link(self.media_mediator_tees[1].get_sink())
+        self.media_mediator_tees[0].link(self.media_rtmp_sink.request_pad(0, 0, 1920, 1080, 'PGM'))
+        self.media_mediator_tees[1].link(self.media_rtmp_sink.request_pad(1220, 660, 640, 360, 'PRE'))
 
         self.loop = ''
 
