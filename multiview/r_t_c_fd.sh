@@ -102,7 +102,7 @@ cmd += ' ! tee ! glvm.sink_1'
 cmd += ' t1. ! queue'
 cmd += ' ! nvvidconv ! \"video/x-raw, width=(int)960, height=(int)540\"'
 cmd += ' ! textoverlay text=\"PRE\" valignment=top halignment=left font-desc=\"Sans, 20\"'
-cmd += ' ! tee ! mix.sink_0'
+cmd += ' ! mix.sink_0'
 
 cmd += ' t2. ! queue'
 cmd += ' ! nvvidconv ! \"video/x-raw, width=(int)960, height=(int)540\"'
